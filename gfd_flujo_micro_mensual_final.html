@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GFD — Flujo micro mensual · versión final cliente</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --bg-2: #121212;
+    --fg: #f5f1e8;
+    --muted: #b4b2a9;
+    --line: #5f5e5a;
+    --gold: #c9a84c;
+    --gold-soft: rgba(201,168,76,0.18);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, #232220 0%, var(--bg) 70%);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* —— TOP BAR —— */
+  header {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 22px;
+    background: linear-gradient(to bottom, rgba(10,10,10,0.92), rgba(10,10,10,0.55));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 10;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  header h1 {
+    font-size: 16px; font-weight: 500; margin: 0;
+    letter-spacing: 0.5px;
+  }
+  header .sub {
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-left: 14px;
+  }
+  .header-left { display: flex; align-items: baseline; }
+
+  /* —— BOTONERA —— */
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--fg);
+    padding: 8px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { background: rgba(201,168,76,0.08); border-color: var(--gold-soft); color: var(--gold); }
+  .btn.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); font-weight: 600; }
+  .btn.primary:hover { background: #d9b758; }
+  .btn.icon { padding: 8px 10px; min-width: 36px; justify-content: center; font-size: 14px; }
+
+  /* —— CANVAS de SVG —— */
+  .canvas {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    cursor: grab;
+  }
+  .canvas.grabbing { cursor: grabbing; }
+  .stage {
+    transform-origin: 0 0;
+    transition: transform 0.05s linear;
+    will-change: transform;
+    padding: 80px 40px 40px;
+    max-width: 760px;
+  }
+  .stage svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* —— ESTILOS DE NODOS Y COLORES —— */
+  text.t  { font-family: inherit; font-size: 14px; font-weight: 400; fill: var(--fg); }
+  text.ts { font-family: inherit; font-size: 12px; font-weight: 400; fill: var(--muted); }
+  text.th { font-family: inherit; font-size: 14px; font-weight: 500; fill: var(--fg); }
+  .c-amber  rect { fill: #633806; stroke: #FAC775; }
+  .c-amber  .th, .c-amber  .t  { fill: #FAEEDA; }
+  .c-amber  .ts { fill: #FAC775; }
+  .c-purple rect { fill: #3C3489; stroke: #CECBF6; }
+  .c-purple .th, .c-purple .t  { fill: #EEEDFE; }
+  .c-purple .ts { fill: #CECBF6; }
+  .c-teal   rect { fill: #085041; stroke: #9FE1CB; }
+  .c-teal   .th, .c-teal   .t  { fill: #E1F5EE; }
+  .c-teal   .ts { fill: #9FE1CB; }
+  .c-coral  rect { fill: #712B13; stroke: #F5C4B3; }
+  .c-coral  .th, .c-coral  .t  { fill: #FAECE7; }
+  .c-coral  .ts { fill: #F5C4B3; }
+  .c-pink   rect { fill: #72243E; stroke: #F4C0D1; }
+  .c-pink   .th, .c-pink   .t  { fill: #FBEAF0; }
+  .c-pink   .ts { fill: #F4C0D1; }
+  .c-gray   rect { fill: #2C2C2A; stroke: #888780; }
+  .c-gray   .th, .c-gray   .t  { fill: #F1EFE8; }
+  .c-gray   .ts { fill: #B4B2A9; }
+  .arr { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+
+  /* —— INTERACTIVIDAD —— */
+  g.node { cursor: pointer; transition: opacity 0.35s ease, transform 0.35s ease; }
+  g.node rect { transition: stroke-width 0.25s ease, filter 0.25s ease; }
+  /* Modo focus: cuando un nodo está activo, el resto se opaca */
+  body.has-focus g.node { opacity: 0.22; }
+  body.has-focus g.node.is-active { opacity: 1; }
+  g.node.is-active rect {
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 12px rgba(201,168,76,0.35));
+  }
+  g.node:hover { opacity: 1 !important; }
+  g.node:hover rect { stroke-width: 2.2; }
+
+  /* —— PANEL DE INFO (tooltip lateral) —— */
+  .info-panel {
+    position: fixed;
+    right: 22px; top: 50%; transform: translateY(-50%) translateX(120%);
+    width: 320px; max-width: calc(100vw - 44px);
+    background: rgba(20,20,20,0.96);
+    border: 1px solid var(--gold-soft);
+    border-left: 3px solid var(--gold);
+    padding: 22px 24px;
+    border-radius: 8px;
+    z-index: 12;
+    transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .info-panel.open {
+    transform: translateY(-50%) translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .info-panel .ip-step {
+    font-family: inherit; font-size: 10.5px; letter-spacing: 0.22em;
+    color: var(--gold); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .info-panel .ip-title {
+    font-size: 18px; font-weight: 500; line-height: 1.3; margin: 0 0 10px;
+  }
+  .info-panel .ip-body {
+    font-size: 13.5px; line-height: 1.6; color: var(--muted);
+  }
+  .info-panel .ip-nav {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em;
+  }
+  .info-panel .ip-counter { font-family: 'DM Mono', ui-monospace, monospace; }
+  .info-panel button { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 4px; transition: background 0.2s; font-size: 11.5px; }
+  .info-panel button:hover { background: rgba(201,168,76,0.12); color: var(--gold); }
+  .info-panel button:disabled { opacity: 0.3; pointer-events: none; }
+  .info-panel .ip-close {
+    position: absolute; top: 10px; right: 10px;
+    background: transparent; border: none; color: var(--muted);
+    cursor: pointer; font-size: 18px; padding: 4px 8px;
+    line-height: 1;
+  }
+  .info-panel .ip-close:hover { color: var(--gold); }
+
+  /* —— LEYENDA —— */
+  .legend {
+    position: fixed; left: 22px; bottom: 22px;
+    background: rgba(20,20,20,0.92);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 18px;
+    border-radius: 8px;
+    z-index: 11;
+    font-size: 11px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    max-width: 320px;
+  }
+  .legend-toggle {
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    color: var(--muted);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+  }
+  .legend-toggle:hover { color: var(--fg); }
+  .legend-toggle .arrow { transition: transform 0.25s ease; display: inline-block; }
+  .legend.open .legend-toggle .arrow { transform: rotate(180deg); }
+  .legend-content { display: none; margin-top: 12px; }
+  .legend.open .legend-content { display: block; }
+  .legend-item { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid; flex-shrink: 0; }
+  .legend-text { color: var(--fg); font-size: 12px; }
+  .legend-text strong { color: var(--gold); font-weight: 500; }
+
+  /* —— ZOOM CONTROLS —— */
+  .zoom-controls {
+    position: fixed; right: 22px; bottom: 22px;
+    display: flex; flex-direction: column; gap: 4px;
+    background: rgba(20,20,20,0.92);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 6px;
+    border-radius: 8px;
+    z-index: 11;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .zoom-controls .btn { padding: 6px 10px; min-width: 32px; font-size: 14px; border: none; background: transparent; }
+  .zoom-controls .btn:hover { background: rgba(201,168,76,0.12); }
+  .zoom-pct {
+    text-align: center;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 3px 0;
+    letter-spacing: 0.08em;
+  }
+
+  /* —— HINT INICIAL —— */
+  .hint {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(20,20,20,0.96);
+    border: 1px solid var(--gold-soft);
+    padding: 22px 32px;
+    border-radius: 8px;
+    z-index: 20;
+    text-align: center;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .hint h2 { margin: 0 0 8px; font-size: 16px; font-weight: 500; color: var(--gold); }
+  .hint p { margin: 4px 0; font-size: 13px; color: var(--muted); }
+  .hint.fade { opacity: 0; }
+
+  /* —— LOADING PROGRESS BAR (modo presentación) —— */
+  .progress {
+    position: fixed; top: 60px; left: 0; right: 0;
+    height: 2px;
+    background: rgba(255,255,255,0.04);
+    z-index: 10;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  body.tour-mode .progress { opacity: 1; }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(to right, var(--gold), #d9b758);
+    width: 0%;
+    transition: width 0.5s ease;
+  }
+
+  /* —— MEDIA QUERIES —— */
+  @media (max-width: 720px) {
+    header { padding: 10px 14px; }
+    header h1 { font-size: 13px; }
+    header .sub { display: none; }
+    .btn { padding: 6px 10px; font-size: 11px; }
+    .info-panel { width: calc(100vw - 44px); right: 22px; left: 22px; top: auto; bottom: 100px; transform: translateY(120%); }
+    .info-panel.open { transform: translateY(0); }
+    .legend { left: 14px; bottom: 14px; max-width: 220px; }
+    .zoom-controls { right: 14px; bottom: 14px; }
+  }
+  @media print {
+    header, .controls, .legend, .zoom-controls, .info-panel, .hint, .progress { display: none !important; }
+    body { background: white; color: black; overflow: visible; }
+    .canvas { position: static; }
+    .stage { transform: none !important; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>GFD — Flujo micro mensual</h1>
+    <span class="sub">Cómo se procesa un mes</span>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btnReset" title="Centrar y resetear zoom (R)">↺ Reset</button>
+    <button class="btn" id="btnFull" title="Pantalla completa (F)">⛶ Fullscreen</button>
+    <button class="btn primary" id="btnTour" title="Recorrer paso a paso (T)">▶ Recorrer el flujo</button>
+  </div>
+</header>
+
+<div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+
+<div class="canvas" id="canvas">
+  <div class="stage" id="stage">
+<svg viewBox="0 0 680 2080" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<g class="c-gray node" data-step="0" data-title="Mapa del escenario completo" data-body="Este flujo es la versión más completa posible de un mes. En meses livianos no se activan todas las ramas — el sistema se repliega y expande según la obra disponible.">
+<rect x="40" y="20" width="600" height="44" rx="8" stroke-width="0.5"/>
+<text class="ts" x="340" y="40" text-anchor="middle" dominant-baseline="central">Mapa del escenario más completo posible</text>
+<text class="ts" x="340" y="55" text-anchor="middle" dominant-baseline="central">Meses livianos no activan todas las ramas — el sistema se repliega y expande</text>
+</g>
+
+<text class="ts" x="40" y="92">Día 1-3 — Coordinación inicial</text>
+
+<g class="c-amber node" data-step="1" data-title="Llamada de arranque" data-body="Día 1-3 del mes. 15-20 minutos. Revisamos cuántas obras hay activas, la agenda real del cliente, y armamos la previsión inicial del mes: cuánto contenido de obra esperamos y cuánto de oficina vamos a necesitar.">
+<rect x="40" y="104" width="600" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="126" text-anchor="middle" dominant-baseline="central">Llamada de arranque</text>
+<text class="ts" x="340" y="144" text-anchor="middle" dominant-baseline="central">¿Cuántas obras? Agenda · Previsión inicial</text>
+</g>
+
+<line x1="340" y1="160" x2="340" y2="184" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="206">Semana 1 — YouTube de obra primero (motor)</text>
+
+<g class="c-purple node" data-step="2" data-title="Cliente sube material de obra al drive" data-body="El cliente sube el crudo de su obra al Drive. Es parte de su día a día — no es jornada extra. Cada material subido dispara el comienzo del ciclo del mes.">
+<rect x="40" y="218" width="420" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="250" y="240" text-anchor="middle" dominant-baseline="central">Cliente sube material de obra al drive</text>
+</g>
+
+<g class="c-gray node" data-step="2b" data-title="Sin esfuerzo extra del cliente" data-body="Subir el crudo al Drive es parte del día a día del cliente. No requiere jornada adicional ni planificación: solo el hábito de bajar lo grabado al servidor compartido.">
+<rect x="476" y="218" width="164" height="44" rx="8" stroke-width="0.5"/>
+<text class="ts" x="558" y="234" text-anchor="middle" dominant-baseline="central">Parte del día a día</text>
+<text class="ts" x="558" y="248" text-anchor="middle" dominant-baseline="central">No es jornada extra</text>
+</g>
+
+<line x1="250" y1="262" x2="340" y2="284" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-purple node" data-step="3" data-title="YouTube de obra — armado del video largo" data-body="Lo primero que se edita: el video largo de YouTube. La obra completa, de cuando llegó el primer día hasta la entrega. Es el activo madre del mes y lo que más proceso lleva. De ese video largo nacen después todos los reels.">
+<rect x="40" y="292" width="600" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="314" text-anchor="middle" dominant-baseline="central">YouTube de obra — armado del video largo</text>
+<text class="ts" x="340" y="332" text-anchor="middle" dominant-baseline="central">Recorrido completo de la obra</text>
+</g>
+
+<line x1="340" y1="348" x2="340" y2="372" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-amber node" data-step="4" data-title="Recalibración post YouTube de obra" data-body="Con el video largo casi listo, hacemos una primera lectura del mes: ¿cuántos reels rinde esta obra? ¿Hay una próxima obra entrando este mes o no? Esa respuesta define la dieta de oficina del mes: cuánto contenido extra vamos a necesitar.">
+<rect x="40" y="380" width="600" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="404" text-anchor="middle" dominant-baseline="central">Recalibración post YouTube de obra</text>
+<text class="ts" x="340" y="424" text-anchor="middle" dominant-baseline="central">¿Cuántos reels rinde? ¿Hay próxima obra este mes?</text>
+<text class="ts" x="340" y="438" text-anchor="middle" dominant-baseline="central">Define la dieta de oficina del mes</text>
+</g>
+
+<line x1="340" y1="444" x2="340" y2="472" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="492">Semana 2 — Genero los reels + arranca producción oficina</text>
+
+<g class="c-purple node" data-step="5" data-title="Genero los reels del YouTube" data-body="Del video largo se extraen los mejores momentos: hooks, decisiones técnicas, reveals, tips espontáneos. Salen 4-6 cortes con sus variantes (hasta 2 estilos cada uno, donde valga la pena testear).">
+<rect x="40" y="504" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="526" text-anchor="middle" dominant-baseline="central">Genero los reels del YouTube</text>
+<text class="ts" x="185" y="544" text-anchor="middle" dominant-baseline="central">4-6 cortes + variantes</text>
+</g>
+
+<g class="c-teal node" data-step="6" data-title="Yo escribo guiones de oficina" data-body="En paralelo al armado de reels de obra, escribo los guiones de los videos de oficina del mes. Los importantes van con guion completo; el resto, con bullets para que el cliente hable con libertad sobre temas definidos.">
+<rect x="350" y="504" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="526" text-anchor="middle" dominant-baseline="central">Yo escribo guiones de oficina</text>
+<text class="ts" x="495" y="544" text-anchor="middle" dominant-baseline="central">Importantes con guion · resto bullets</text>
+</g>
+
+<line x1="185" y1="560" x2="185" y2="584" class="arr" marker-end="url(#arrow)"/>
+<line x1="495" y1="560" x2="495" y2="584" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-purple node" data-step="7" data-title="Edición de variantes" data-body="Cada reel candidato se edita en hasta dos estilos: crudo (sonido ambiente, sin narrativa), voz en off (storytelling), o mix (voz + ambiente + cortes rápidos). Solo los reels que valen testear obtienen variantes — no todo.">
+<rect x="40" y="592" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="614" text-anchor="middle" dominant-baseline="central">Edición de variantes</text>
+<text class="ts" x="185" y="632" text-anchor="middle" dominant-baseline="central">Crudo · voz off · mix</text>
+</g>
+
+<g class="c-teal node" data-step="8" data-title="Cliente aprueba guiones" data-body="El cliente recibe los guiones y los aprueba (o pide ajustes) en 2-3 días. Este margen es clave para no frenar la edición y dar tiempo a planificar la sesión de grabación de oficina.">
+<rect x="350" y="592" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="614" text-anchor="middle" dominant-baseline="central">Cliente aprueba guiones</text>
+<text class="ts" x="495" y="632" text-anchor="middle" dominant-baseline="central">2-3 días de margen</text>
+</g>
+
+<line x1="185" y1="648" x2="185" y2="672" class="arr" marker-end="url(#arrow)"/>
+<line x1="495" y1="648" x2="495" y2="672" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-purple node" data-step="9" data-title="Testing en reel privado" data-body="Las variantes editadas se suben a un reel privado (no público). Durante 5 a 10 días acumulan señales: vistas, retención, completion, saves, shares. El scoring objetivo de 4 métricas elige al ganador — sin gusto, solo data.">
+<rect x="40" y="680" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="702" text-anchor="middle" dominant-baseline="central">Testing en reel privado</text>
+<text class="ts" x="185" y="720" text-anchor="middle" dominant-baseline="central">5-10 días · scoring 4 métricas</text>
+</g>
+
+<g class="c-teal node" data-step="10" data-title="Batch oficina del cliente — Sesión 1" data-body="Primera sesión de grabación concentrada del cliente: 5 horas en una sola jornada para grabar todo lo de oficina del mes. Incluye el YouTube largo de oficina, los reels nativos y las piezas de carruseles que requieren grabación.">
+<rect x="350" y="680" width="290" height="76" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="704" text-anchor="middle" dominant-baseline="central">Batch oficina del cliente</text>
+<text class="ts" x="495" y="724" text-anchor="middle" dominant-baseline="central">Sesión 1 — 5h concentradas</text>
+<text class="ts" x="495" y="740" text-anchor="middle" dominant-baseline="central">YouTube largo · reels nativos · piezas carruseles</text>
+</g>
+
+<line x1="495" y1="756" x2="495" y2="780" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-teal node" data-step="11" data-title="YouTube de oficina publicado" data-body="El video largo de oficina ya editado y aprobado se publica en YouTube. Es el segundo activo madre del mes — vive en Google y YouTube para siempre como reservorio de autoridad técnica buscable.">
+<rect x="350" y="788" width="290" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="810" text-anchor="middle" dominant-baseline="central">YouTube de oficina publicado</text>
+</g>
+
+<line x1="495" y1="832" x2="495" y2="856" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-teal node" data-step="12" data-title="Genero los reels de oficina" data-body="Del YouTube de oficina ya publicado se extraen los mejores cortes. Se suman a los reels nativos grabados durante el batch. Estos reels alimentan los días de la semana orientados a autoridad y conversión (martes y jueves principalmente).">
+<rect x="350" y="864" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="886" text-anchor="middle" dominant-baseline="central">Genero los reels de oficina</text>
+<text class="ts" x="495" y="904" text-anchor="middle" dominant-baseline="central">Cortes del YouTube + nativos del batch</text>
+</g>
+
+<line x1="185" y1="736" x2="185" y2="940" class="arr" marker-end="url(#arrow)"/>
+<line x1="495" y1="920" x2="495" y2="940" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="960">Semana 3 — Jornada de cierre del cliente</text>
+
+<g class="c-amber node" data-step="13" data-title="Sesión 2 — Jornada de cierre" data-body="Segunda jornada del cliente: 2 a 3 horas concentradas. Sirve para cerrar todo lo pendiente — hooks, intros, voz off, CTAs y los recortes/variantes que necesitan grabación extra después del testing. Es la última instancia del mes donde el cliente está frente a cámara.">
+<rect x="40" y="972" width="600" height="76" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="996" text-anchor="middle" dominant-baseline="central">Sesión 2 — Jornada de cierre (2-3h concentradas)</text>
+<text class="ts" x="340" y="1016" text-anchor="middle" dominant-baseline="central">Lista consolidada: hooks, intros, voz off, CTAs pendientes</text>
+<text class="ts" x="340" y="1032" text-anchor="middle" dominant-baseline="central">Cierra recortes y variantes que necesitan grabación extra</text>
+</g>
+
+<line x1="340" y1="1048" x2="340" y2="1072" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-purple node" data-step="14" data-title="Cierre variantes obra" data-body="Con la grabación de la Sesión 2, terminamos las variantes de obra que necesitaban un complemento (una voz en off extra, una intro nueva, un CTA). Quedan listas para testing final o publicación directa.">
+<rect x="40" y="1080" width="290" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="1102" text-anchor="middle" dominant-baseline="central">Cierre variantes obra</text>
+</g>
+
+<g class="c-teal node" data-step="15" data-title="Cierre piezas oficina" data-body="Análogo a las variantes de obra: cerramos las piezas de oficina (reels y carruseles) que esperaban grabación de cierre. Es el último ajuste antes de validación final.">
+<rect x="350" y="1080" width="290" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="1102" text-anchor="middle" dominant-baseline="central">Cierre piezas oficina</text>
+</g>
+
+<line x1="185" y1="1124" x2="185" y2="1148" class="arr" marker-end="url(#arrow)"/>
+<line x1="495" y1="1124" x2="495" y2="1148" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-purple node" data-step="16" data-title="Variantes ganadoras" data-body="El scoring eligió. Cada reel de obra que pasó por testing ahora tiene su estilo ganador definido. Esos son los que pasan al feed público dentro de los 20 del mes.">
+<rect x="40" y="1156" width="290" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="1178" text-anchor="middle" dominant-baseline="central">Variantes ganadoras</text>
+</g>
+
+<g class="c-teal node" data-step="17" data-title="Testing liviano oficina" data-body="Los reels de oficina pasan por un testing más corto (3-5 días) con métricas básicas. El contenido de oficina es más predecible que el de obra, por eso no requiere el ciclo completo de 5-10 días.">
+<rect x="350" y="1156" width="290" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="1178" text-anchor="middle" dominant-baseline="central">Testing liviano oficina</text>
+<text class="ts" x="495" y="1196" text-anchor="middle" dominant-baseline="central">3-5 días · métricas básicas</text>
+</g>
+
+<line x1="185" y1="1200" x2="185" y2="1244" class="arr" marker-end="url(#arrow)"/>
+<line x1="495" y1="1212" x2="495" y2="1244" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="1264">Semana 3-4 — Carruseles + punto de control</text>
+
+<g class="c-pink node" data-step="18" data-title="Carruseles — parte estable de la mezcla" data-body="Los carruseles no son relleno: son parte estable de la dieta mensual. Mínimo 1-2 por mes, combinando material nuevo con piezas recicladas del Banco Curado (planos validados con nuevo eje narrativo).">
+<rect x="40" y="1276" width="600" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="1298" text-anchor="middle" dominant-baseline="central">Carruseles — parte estable de la mezcla</text>
+<text class="ts" x="340" y="1316" text-anchor="middle" dominant-baseline="central">Mínimo 1-2 por mes · combinan material nuevo y reciclado</text>
+</g>
+
+<line x1="340" y1="1332" x2="340" y2="1356" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-gray node" data-step="19" data-title="Punto de control — ¿cuántas piezas validadas tenemos?" data-body="Hacemos cuentas. Estimación habitual: 4-6 reels de obra + 6-8 reels de oficina + 2-4 piezas del largo de oficina + 1-2 carruseles. Total cercano a 20, que es el compromiso del mes.">
+<rect x="40" y="1364" width="600" height="60" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="1388" text-anchor="middle" dominant-baseline="central">Punto de control — ¿cuántas piezas validadas?</text>
+<text class="ts" x="340" y="1408" text-anchor="middle" dominant-baseline="central">Estimado: 4-6 obra + 6-8 oficina + 2-4 largo oficina + 1-2 carruseles</text>
+</g>
+
+<line x1="340" y1="1424" x2="340" y2="1448" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-amber node" data-step="20" data-title="Decisión de gap" data-body="¿Llegamos a 20? Si sí, activamos calendario directo. Si faltan 2-3 piezas, activamos la red de contingencia: reciclado del Banco Curado o un carrusel extra educativo. Cero piezas al feed sin validar.">
+<rect x="40" y="1456" width="600" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="1478" text-anchor="middle" dominant-baseline="central">Decisión de gap</text>
+<text class="ts" x="340" y="1496" text-anchor="middle" dominant-baseline="central">¿Falta llegar a 20? → activar red de contingencia</text>
+</g>
+
+<line x1="340" y1="1512" x2="165" y2="1548" class="arr" marker-end="url(#arrow)"/>
+<line x1="340" y1="1512" x2="515" y2="1548" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="74" y="1542">sí llegamos</text>
+<text class="ts" x="450" y="1542">faltan 2-3</text>
+
+<g class="c-teal node" data-step="21" data-title="Calendario activado" data-body="Las 20 piezas validadas se distribuyen según el calendario semanal: lunes (atención), martes (autoridad), miércoles (valor), jueves (comunidad), viernes (conversión). Cada día tiene su función psicológica.">
+<rect x="40" y="1556" width="250" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="165" y="1578" text-anchor="middle" dominant-baseline="central">Calendario activado</text>
+<text class="ts" x="165" y="1596" text-anchor="middle" dominant-baseline="central">20 piezas distribuidas</text>
+</g>
+
+<g class="c-coral node" data-step="22" data-title="Contingencia — red de seguridad" data-body="Si faltan piezas para llegar a 20, activamos reciclado del Banco Curado o sumamos un carrusel extra. Importante: lo reciclado pasa por el mismo testing que cualquier pieza nueva. Cero piezas al feed sin validar, sin importar el origen.">
+<rect x="390" y="1556" width="250" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="515" y="1578" text-anchor="middle" dominant-baseline="central">Contingencia</text>
+<text class="ts" x="515" y="1596" text-anchor="middle" dominant-baseline="central">Reciclado · carrusel extra</text>
+</g>
+
+<line x1="515" y1="1612" x2="515" y2="1636" class="arr"/>
+<line x1="515" y1="1636" x2="165" y2="1636" class="arr"/>
+<line x1="165" y1="1636" x2="165" y2="1660" class="arr" marker-end="url(#arrow)"/>
+
+<line x1="165" y1="1612" x2="165" y2="1660" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-gray node" data-step="23" data-title="20 piezas al feed · cero sin validar" data-body="El compromiso del mes cumplido. Cada una de las 20 piezas pasó por el sistema de testing y scoring antes de publicarse. Ninguna llegó al feed por intuición o por gusto.">
+<rect x="40" y="1668" width="600" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="1690" text-anchor="middle" dominant-baseline="central">20 piezas al feed · cero sin validar</text>
+</g>
+
+<line x1="340" y1="1712" x2="340" y2="1736" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="1758">Procesos transversales — corren todo el mes</text>
+
+<g class="c-gray node" data-step="24" data-title="Llamadas semanales (transversal)" data-body="Cada semana, 15 a 20 minutos por llamada. Recalibramos la previsión del mes con la información real que va llegando: ¿la obra rindió más o menos? ¿Apareció una obra nueva? ¿Necesitamos más oficina?">
+<rect x="40" y="1770" width="290" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="1792" text-anchor="middle" dominant-baseline="central">Llamadas semanales</text>
+<text class="ts" x="185" y="1810" text-anchor="middle" dominant-baseline="central">15-20 min · recalibran</text>
+<text class="ts" x="185" y="1824" text-anchor="middle" dominant-baseline="central">la previsión del mes</text>
+</g>
+
+<g class="c-gray node" data-step="25" data-title="Ideas sueltas (transversal)" data-body="A lo largo del mes te paso ideas concretas de tips para grabar dentro de la obra: cómo atar el alambre, un error común, un dato técnico. Cada uno es un reel que no depende de ninguna serie. También pueden surgir voces en off extra del propio metraje.">
+<rect x="350" y="1770" width="290" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="1792" text-anchor="middle" dominant-baseline="central">Ideas sueltas</text>
+<text class="ts" x="495" y="1810" text-anchor="middle" dominant-baseline="central">Tips para grabar en obra</text>
+<text class="ts" x="495" y="1824" text-anchor="middle" dominant-baseline="central">Pueden surgir voces off extra</text>
+</g>
+
+<g class="c-gray node" data-step="26" data-title="Sábado opcional (transversal)" data-body="Día de batch para respuestas a DMs y comentarios acumulados. Es opcional — si el volumen lo justifica, en una jornada se graban 10-16 respuestas y suben la cuenta a 6 reels semanales sin esfuerzo extra del cliente.">
+<rect x="40" y="1846" width="290" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="185" y="1868" text-anchor="middle" dominant-baseline="central">Sábado opcional</text>
+<text class="ts" x="185" y="1886" text-anchor="middle" dominant-baseline="central">Batch respuestas</text>
+<text class="ts" x="185" y="1900" text-anchor="middle" dominant-baseline="central">DMs y comentarios</text>
+</g>
+
+<g class="c-gray node" data-step="27" data-title="Reporte fin de mes (transversal)" data-body="Al cierre del mes recibís un reporte con la data dura del mes (qué pegó, qué no, top performers, lecturas) y la llamada estratégica de 60 minutos. Es el insumo para decidir el calibrado del próximo mes.">
+<rect x="350" y="1846" width="290" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="495" y="1868" text-anchor="middle" dominant-baseline="central">Reporte fin de mes</text>
+<text class="ts" x="495" y="1886" text-anchor="middle" dominant-baseline="central">Data + aprendizajes</text>
+<text class="ts" x="495" y="1900" text-anchor="middle" dominant-baseline="central">Llamada estratégica</text>
+</g>
+
+<line x1="340" y1="1930" x2="340" y2="1956" class="arr" marker-end="url(#arrow)"/>
+
+<g class="c-amber node" data-step="28" data-title="Recalibración para el próximo mes" data-body="El cierre del ciclo. Lecturas del mes que pasó: ¿qué pegó? ¿cuánto reciclamos del Banco? ¿la mezcla obra/oficina fue correcta? Esa lectura modifica el calibrado del siguiente mes — el sistema se afina solo, mes a mes.">
+<rect x="40" y="1964" width="600" height="64" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="1988" text-anchor="middle" dominant-baseline="central">Recalibración para el próximo mes</text>
+<text class="ts" x="340" y="2008" text-anchor="middle" dominant-baseline="central">¿Qué pegó? ¿Cuánto reciclamos? ¿Cómo ajustar la mezcla?</text>
+<text class="ts" x="340" y="2022" text-anchor="middle" dominant-baseline="central">Modifica el calibrado del mes siguiente</text>
+</g>
+
+<line x1="40" y1="1996" x2="20" y2="1996" stroke="#888780" stroke-width="0.5"/>
+<line x1="20" y1="1996" x2="20" y2="132" stroke="#888780" stroke-width="0.5" stroke-dasharray="3,3"/>
+<line x1="20" y1="132" x2="38" y2="132" class="arr" marker-end="url(#arrow)"/>
+
+<text class="ts" x="40" y="2050">Bucle punteado — la data alimenta la próxima previsión</text>
+<text class="ts" x="40" y="2066">El sistema se afina solo mes a mes</text>
+</svg>
+  </div>
+</div>
+
+<!-- Info panel -->
+<div class="info-panel" id="infoPanel" role="dialog" aria-labelledby="ipTitle">
+  <button class="ip-close" id="ipClose" aria-label="Cerrar">×</button>
+  <div class="ip-step" id="ipStep">Paso 01</div>
+  <h3 class="ip-title" id="ipTitle">—</h3>
+  <p class="ip-body" id="ipBody">—</p>
+  <div class="ip-nav">
+    <button id="ipPrev">← Anterior</button>
+    <span class="ip-counter" id="ipCounter">1 / 29</span>
+    <button id="ipNext">Siguiente →</button>
+  </div>
+</div>
+
+<!-- Leyenda de colores -->
+<div class="legend" id="legend">
+  <div class="legend-toggle" id="legendToggle">
+    <span>Leyenda</span>
+    <span class="arrow">▾</span>
+  </div>
+  <div class="legend-content">
+    <div class="legend-item"><span class="legend-swatch" style="background:#3C3489;border-color:#CECBF6;"></span><span class="legend-text"><strong>Obra</strong> — producción del material de obra</span></div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#085041;border-color:#9FE1CB;"></span><span class="legend-text"><strong>Oficina</strong> — contenido grabado fuera de obra</span></div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#633806;border-color:#FAC775;"></span><span class="legend-text"><strong>Decisión</strong> — momentos de recalibración del mes</span></div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#72243E;border-color:#F4C0D1;"></span><span class="legend-text"><strong>Carruseles</strong> — formato complementario</span></div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#712B13;border-color:#F5C4B3;"></span><span class="legend-text"><strong>Contingencia</strong> — red de seguridad si falta volumen</span></div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#2C2C2A;border-color:#888780;"></span><span class="legend-text"><strong>Sistema / control</strong> — chequeos y procesos transversales</span></div>
+  </div>
+</div>
+
+<!-- Zoom controls -->
+<div class="zoom-controls">
+  <button class="btn icon" id="btnZoomIn" title="Acercar (+)">+</button>
+  <div class="zoom-pct" id="zoomPct">100%</div>
+  <button class="btn icon" id="btnZoomOut" title="Alejar (−)">−</button>
+</div>
+
+<!-- Hint inicial -->
+<div class="hint" id="hint">
+  <h2>Click en cualquier nodo para verlo en detalle</h2>
+  <p>Usá rueda del mouse para zoom · Drag para mover</p>
+  <p style="margin-top: 12px; color: var(--gold);">O tocá "Recorrer el flujo" para ir paso a paso</p>
+</div>
+
+<script>
+(() => {
+  // ============= STATE =============
+  const canvas = document.getElementById('canvas');
+  const stage = document.getElementById('stage');
+  const nodes = Array.from(document.querySelectorAll('g.node'));
+  const infoPanel = document.getElementById('infoPanel');
+  const ipStep = document.getElementById('ipStep');
+  const ipTitle = document.getElementById('ipTitle');
+  const ipBody = document.getElementById('ipBody');
+  const ipCounter = document.getElementById('ipCounter');
+  const ipPrev = document.getElementById('ipPrev');
+  const ipNext = document.getElementById('ipNext');
+  const ipClose = document.getElementById('ipClose');
+  const zoomPct = document.getElementById('zoomPct');
+  const progressBar = document.getElementById('progressBar');
+  const hint = document.getElementById('hint');
+
+  let scale = 1;
+  let tx = 0, ty = 0;
+  let currentIndex = -1;
+  let tourMode = false;
+
+  const MIN_SCALE = 0.3;
+  const MAX_SCALE = 3;
+
+  // ============= APPLY TRANSFORM =============
+  const apply = () => {
+    stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    zoomPct.textContent = Math.round(scale * 100) + '%';
+  };
+
+  // Centrar inicialmente
+  const center = () => {
+    const cw = canvas.clientWidth;
+    const sw = stage.scrollWidth;
+    tx = Math.max(0, (cw - sw * scale) / 2);
+    ty = 0;
+    apply();
+  };
+
+  // ============= ZOOM CON RUEDA =============
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    // Posición del punto del cursor en el stage (pre-zoom)
+    const px = (mx - tx) / scale;
+    const py = (my - ty) / scale;
+    const delta = -e.deltaY * 0.0015;
+    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * (1 + delta)));
+    scale = newScale;
+    // Reposicionar para que el punto bajo el cursor quede en el mismo lugar
+    tx = mx - px * scale;
+    ty = my - py * scale;
+    apply();
+  }, { passive: false });
+
+  // ============= PAN CON DRAG =============
+  let isDragging = false;
+  let dragStart = { x: 0, y: 0, tx: 0, ty: 0 };
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.target.closest('g.node')) return; // No drag si toco un nodo
+    isDragging = true;
+    canvas.classList.add('grabbing');
+    dragStart = { x: e.clientX, y: e.clientY, tx, ty };
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    tx = dragStart.tx + (e.clientX - dragStart.x);
+    ty = dragStart.ty + (e.clientY - dragStart.y);
+    apply();
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    canvas.classList.remove('grabbing');
+  });
+
+  // ============= TOUCH SUPPORT (móvil) =============
+  let touchStart = null;
+  let pinchDist = null;
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, tx, ty };
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchDist = Math.hypot(dx, dy);
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1 && touchStart) {
+      tx = touchStart.tx + (e.touches[0].clientX - touchStart.x);
+      ty = touchStart.ty + (e.touches[0].clientY - touchStart.y);
+      apply();
+    } else if (e.touches.length === 2 && pinchDist) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / pinchDist;
+      scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * ratio));
+      pinchDist = newDist;
+      apply();
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => { touchStart = null; pinchDist = null; });
+
+  // ============= INFO PANEL =============
+  const showNode = (idx, opts = {}) => {
+    if (idx < 0 || idx >= nodes.length) return;
+    currentIndex = idx;
+    nodes.forEach(n => n.classList.remove('is-active'));
+    const node = nodes[idx];
+    node.classList.add('is-active');
+    document.body.classList.add('has-focus');
+
+    ipStep.textContent = `Paso ${String(idx + 1).padStart(2, '0')}`;
+    ipTitle.textContent = node.dataset.title || '—';
+    ipBody.textContent = node.dataset.body || '—';
+    ipCounter.textContent = `${idx + 1} / ${nodes.length}`;
+    ipPrev.disabled = idx === 0;
+    ipNext.disabled = idx === nodes.length - 1;
+    infoPanel.classList.add('open');
+
+    // Progress bar
+    progressBar.style.width = ((idx + 1) / nodes.length * 100) + '%';
+
+    // Auto-scroll al nodo si está fuera de vista
+    if (opts.scroll !== false) scrollNodeIntoView(node);
+
+    hideHint();
+  };
+
+  const hidePanel = () => {
+    infoPanel.classList.remove('open');
+    document.body.classList.remove('has-focus');
+    nodes.forEach(n => n.classList.remove('is-active'));
+    currentIndex = -1;
+  };
+
+  // Scroll de un nodo a la zona visible (centrado vertical, leve offset horizontal)
+  const scrollNodeIntoView = (node) => {
+    const rect = node.getBoundingClientRect();
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    const targetY = ch / 2;
+    const currentY = rect.top + rect.height / 2;
+    const deltaY = targetY - currentY;
+    ty += deltaY;
+    // Solo centrar horizontalmente si el nodo está muy fuera
+    const targetX = cw / 2;
+    const currentX = rect.left + rect.width / 2;
+    const deltaX = targetX - currentX;
+    if (Math.abs(deltaX) > cw * 0.3) {
+      tx += deltaX;
+    }
+    apply();
+  };
+
+  // Click en nodo
+  nodes.forEach((node, idx) => {
+    node.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentIndex === idx) {
+        hidePanel();
+      } else {
+        showNode(idx, { scroll: false });
+      }
+    });
+  });
+
+  // Click en canvas vacío = cerrar
+  canvas.addEventListener('click', (e) => {
+    if (!e.target.closest('g.node') && !e.target.closest('.info-panel')) {
+      hidePanel();
+    }
+  });
+
+  ipClose.addEventListener('click', hidePanel);
+  ipPrev.addEventListener('click', () => showNode(currentIndex - 1));
+  ipNext.addEventListener('click', () => showNode(currentIndex + 1));
+
+  // ============= MODO TOUR =============
+  const btnTour = document.getElementById('btnTour');
+  const startTour = () => {
+    tourMode = !tourMode;
+    document.body.classList.toggle('tour-mode', tourMode);
+    btnTour.textContent = tourMode ? '■ Pausar recorrido' : '▶ Recorrer el flujo';
+    if (tourMode) {
+      showNode(0);
+    }
+  };
+  btnTour.addEventListener('click', startTour);
+
+  // ============= ZOOM BOTONES =============
+  document.getElementById('btnZoomIn').addEventListener('click', () => {
+    const cx = canvas.clientWidth / 2;
+    const cy = canvas.clientHeight / 2;
+    const px = (cx - tx) / scale;
+    const py = (cy - ty) / scale;
+    scale = Math.min(MAX_SCALE, scale * 1.2);
+    tx = cx - px * scale;
+    ty = cy - py * scale;
+    apply();
+  });
+  document.getElementById('btnZoomOut').addEventListener('click', () => {
+    const cx = canvas.clientWidth / 2;
+    const cy = canvas.clientHeight / 2;
+    const px = (cx - tx) / scale;
+    const py = (cy - ty) / scale;
+    scale = Math.max(MIN_SCALE, scale / 1.2);
+    tx = cx - px * scale;
+    ty = cy - py * scale;
+    apply();
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    scale = 1;
+    center();
+    hidePanel();
+    document.body.classList.remove('tour-mode');
+    tourMode = false;
+    btnTour.textContent = '▶ Recorrer el flujo';
+    progressBar.style.width = '0%';
+  });
+
+  // ============= FULLSCREEN =============
+  document.getElementById('btnFull').addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+
+  // ============= LEYENDA TOGGLE =============
+  const legend = document.getElementById('legend');
+  document.getElementById('legendToggle').addEventListener('click', () => {
+    legend.classList.toggle('open');
+  });
+
+  // ============= ATAJOS DE TECLADO =============
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case ' ':
+        if (currentIndex < nodes.length - 1) {
+          showNode(currentIndex < 0 ? 0 : currentIndex + 1);
+        }
+        e.preventDefault();
+        break;
+      case 'ArrowLeft':
+        if (currentIndex > 0) showNode(currentIndex - 1);
+        e.preventDefault();
+        break;
+      case 'Escape':
+        hidePanel();
+        break;
+      case 'r':
+      case 'R':
+        document.getElementById('btnReset').click();
+        break;
+      case 't':
+      case 'T':
+        startTour();
+        break;
+      case 'f':
+      case 'F':
+        document.getElementById('btnFull').click();
+        break;
+      case '+':
+      case '=':
+        document.getElementById('btnZoomIn').click();
+        break;
+      case '-':
+      case '_':
+        document.getElementById('btnZoomOut').click();
+        break;
+    }
+  });
+
+  // ============= HINT INICIAL =============
+  let hintHidden = false;
+  const hideHint = () => {
+    if (hintHidden) return;
+    hintHidden = true;
+    hint.classList.add('fade');
+    setTimeout(() => hint.style.display = 'none', 500);
+  };
+  setTimeout(hideHint, 6000);
+  canvas.addEventListener('click', hideHint, { once: true });
+  canvas.addEventListener('wheel', hideHint, { once: true });
+
+  // ============= INIT =============
+  window.addEventListener('resize', () => {
+    // No re-centrar para no perder posición del usuario
+  });
+  center();
+})();
+</script>
+</body>
+</html>
